@@ -8,22 +8,49 @@ services:
     ports:
       - "55771:55771"
     volumes:
-      - sootio-data:/app/data  # Persist SQLite cache data
+      - sootio-data:/app/data
     networks:
       - sootio-network
-    env_file:
-      - .env
+      - proxy-net
     environment:
       - NODE_ENV=production
       - LOG_LEVEL=error
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://user:password@postgres:5432/sootio_db
     command: ["npm", "run", "standalone"]
+    restart: always
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: sootio-postgres
+    networks:
+      - sootio-network
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: sootio_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Performance tweaks: Disable synchronous commit for speed
+    command: ["postgres", "-c", "synchronous_commit=off", "-c", "shared_buffers=256MB", "-c", "work_mem=16MB"]
+    restart: always
+
+  redis:
+    image: redis:alpine
+    container_name: sootio-redis
+    networks:
+      - sootio-network
+    # Performance tweaks: Enable overcommit and aggressive saving
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
     restart: always
 
 volumes:
-  sootio-data:  # Named volume for persistent data
+  sootio-data:
+  pgdata:
 
 networks:
   sootio-network:
     driver: bridge
     name: sootio-network
+  proxy-net:
+    external: true
